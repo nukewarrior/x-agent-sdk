@@ -36,6 +36,14 @@ git tag "v${VERSION}"
 git push origin main --tags
 
 echo "==> GitHub release"
-gh release create "v${VERSION}" --generate-notes --title "v${VERSION}"
+GHA="$HOME/.local/bin/gha"
+if [ -x "$GHA" ]; then
+  "$GHA" release create "v${VERSION}" --generate-notes --title "v${VERSION}"
+elif command -v gh >/dev/null 2>&1; then
+  gh release create "v${VERSION}" --generate-notes --title "v${VERSION}"
+else
+  echo "error: gh CLI not found." >&2
+  exit 1
+fi
 
 echo "==> Done: v${VERSION} published on npm and GitHub."
