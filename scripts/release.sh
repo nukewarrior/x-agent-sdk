@@ -62,7 +62,9 @@ NOTES_FILE=$(mktemp)
 LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
 if [ -n "$LAST_TAG" ]; then
   echo "## What's Changed" > "$NOTES_FILE"
-  git log --oneline --no-merges "$LAST_TAG"..HEAD | sed 's/^/- /' >> "$NOTES_FILE"
+  git log --oneline --no-merges "$LAST_TAG"..HEAD |
+    grep -vE ' Bump version to ' |
+    sed 's/^/- /' >> "$NOTES_FILE"
 else
   echo "Initial release." > "$NOTES_FILE"
 fi
