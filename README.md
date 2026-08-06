@@ -2,11 +2,11 @@
 
 <img src="https://raw.githubusercontent.com/alarok/x-agent-sdk/main/assets/x-agent-x-header.png" alt="x-agent banner" width="100%" />
 
-# x-agent
+# x-agent-sdk
 
 **Unofficial X (Twitter) client — for your own code and for AI agents alike.**
 
-Use it as a typed TypeScript library, or drop in its MCP server so agents plug in directly.
+Use it as a typed TypeScript library, or drop in its MCP server so agents connect directly.
 All through the same private GraphQL API the web app uses.
 
 Cookie auth · no OAuth · no paid API · automatic `x-client-transaction-id` · built-in MCP server
@@ -26,8 +26,8 @@ Cookie auth · no OAuth · no paid API · automatic `x-client-transaction-id` ·
 ## Agent setup guide
 
 This package ships a [`SKILL.md`](./SKILL.md) with operating instructions for AI agents:
-MCP setup, credential handling, tool choice, and known X API quirks. Hand the prompt
-below to your agent to wire the MCP server up on this machine.
+MCP setup, credential handling, tool choice, and known X API quirks. Use the prompt below to
+configure the MCP server on this machine.
 
 ```text
 Set up x-agent on this machine.
@@ -75,11 +75,11 @@ API directly — post, reply, like, retweet, search, read timelines — with two
 - **As a library** — a typed TypeScript client you call from your own code, to build
   a bot, a scheduler, a scraper, or any automation you want.
 - **As an MCP server** — drop it into any Model Context Protocol agent (Claude
-  Desktop, Cursor, iris, ...) and it discovers the tools with **zero glue code**.
+  Desktop, Cursor, iris, ...) and it discovers the tools automatically.
 
 Same engine underneath; pick whichever fits.
 
-### The one trick that makes it work
+### Why a plain HTTP client fails
 
 Hitting X's private API with a plain HTTP client returns a misleading
 `error 344 "You have reached your daily limit"` **even on a fresh account with 2
@@ -87,17 +87,15 @@ tweets**. That is *not* a quota — it's anti-bot. The browser signs every reque
 with a per-request `x-client-transaction-id` header. `x-agent` generates that
 header for you, in-process, on every call — with zero third-party crypto.
 
-> Proven live: the same account that returned `344` posts on the first try once the
-> header is attached.
-
 ---
 
 ## Install
 
 ```bash
 bun add x-agent-sdk          # or:  npm install x-agent-sdk
-cd node_modules/x-agent-sdk && npm run build   # if installing from source, compile TS -> dist/
 ```
+
+Installing from source instead (git clone): run `bun install && bun run build` first.
 
 Runs on **Node 18+** and **Bun**. Dependencies are all generic infrastructure:
 `@modelcontextprotocol/sdk` (the MCP server), `node-html-parser` (reads X's home
@@ -193,9 +191,8 @@ await x.bookmark(id);
 
 ## Use it as an MCP server (recommended for agents)
 
-This is what makes an agent *"just know how to use it"*: connect the MCP server
-and the agent **auto-discovers all 24 tools** — names, descriptions, JSON
-schemas. No prompt engineering, no wiring.
+Connect the MCP server and the agent auto-discovers all 24 tools — names,
+descriptions, JSON schemas. No glue code.
 
 ### Config
 
@@ -230,8 +227,8 @@ claude mcp add x-agent \
 ```yaml
 mcp_servers:
   x:
-    command: "node"
-    args: ["/absolute/path/to/x-agent/dist/mcp.js"]
+    command: "npx"
+    args: ["-y", "x-agent-mcp"]
     env:
       AUTH_TOKEN: "..."
       CT0: "..."
@@ -262,12 +259,12 @@ Restart the agent. It now has these tools:
 | `get_mentions` | Tweets mentioning you |
 
 Now you can tell the agent: *"search X for the latest posts about Bun and reply to
-the top one with a question"* — it picks `search_tweets` then `post_tweet` on its own.
+the top one with a question"* — it calls `search_tweets` then `post_tweet` by itself.
 
 ### Try the MCP server by hand
 
 ```bash
-AUTH_TOKEN=... CT0=... node dist/mcp.js
+AUTH_TOKEN=... CT0=... npx -y x-agent-mcp
 # speaks MCP over stdio; connect any MCP client to list/call tools
 ```
 
@@ -276,7 +273,7 @@ AUTH_TOKEN=... CT0=... node dist/mcp.js
 ## Use the tool defs with the Vercel AI SDK (or any framework)
 
 The tool definitions are exported runtime-agnostic (Zod schema + `execute`), so you
-can wire them into any agent runtime, not just MCP:
+can use them in any agent runtime, not just MCP:
 
 ```ts
 import { XClient } from "x-agent-sdk";
@@ -302,8 +299,6 @@ const aiTools = Object.fromEntries(
 
 ---
 
----
-
 ## Reliability notes
 
 - **`344` / `429` handling.** On `344` (anti-bot) the client rebuilds the
@@ -326,7 +321,7 @@ const aiTools = Object.fromEntries(
 src/
   transaction.ts   x-client-transaction-id generator (zero third-party crypto)
   client.ts        XClient — typed methods, 344/429 backoff
-  tools.ts         11 runtime-agnostic tool defs (Zod schemas)
+  tools.ts         24 runtime-agnostic tool defs (Zod schemas)
   mcp.ts           MCP stdio server (bin: x-agent-mcp)
   index.ts         public exports
 dist/              compiled output (what actually runs)
