@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { XClient } from "../src/client.js";
+import { XClient, type RateLimitInfo } from "../src/client.js";
 import { installFetchMock } from "./fixtures.js";
 
 let apiHandler: (url: string) => { status: number; body: unknown };
@@ -76,5 +76,35 @@ describe("XClient parsing", () => {
     const x = new XClient(opts);
     const u = await x.getUser("x");
     expect(u.rest_id).toBe("783214");
+  });
+});
+
+describe("XClient rate limit + injectable fetch", () => {
+  test("getLastRateLimit reads x-rate-limit-remaining headers", async () => {
+    const x = new XClient(opts);
+    await x.postTweet("hello tests");
+    expect(x.getLastRateLimit()).toEqual({ remaining: 999, reset: 0, limit: 0 });
+  });
+
+  test("onRateLimit callback receives the headers", async () => {
+    let got: RateLimitInfo | undefined;
+    const x = new XClient({ ...opts, onRateLimit: (i) => (got = i) });
+    await x.postTweet("hello tests");
+    expect(got).toEqual({ remaining: 999, reset: 0, limit: 0 });
+  });
+
+  test("injected fetch is used for requests", async () => {
+    const used: string[] = [];
+    const real = globalThis.fetch;
+    const x = new XClient({
+      ...opts,
+      fetch: ((url: any, init: any) => {
+        used.push(String(url));
+        return (real as any)(url, init);
+      }) as typeof fetch,
+    });
+    await x.postTweet("hello tests");
+    expect(used.length).toBeGreaterThan(0);
+    expect(used[0]).toContain("/i/api/graphql");
   });
 });

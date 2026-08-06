@@ -105,6 +105,15 @@ const FEATURES_READ: Record<string, boolean> = {
   responsive_web_enhance_cards_enabled: false,
 };
 
+export interface RateLimitInfo {
+  /** Requests left in the current window (x-rate-limit-remaining). */
+  remaining: number;
+  /** Unix seconds when the window resets (x-rate-limit-reset), 0 if absent. */
+  reset: number;
+  /** Window size (x-rate-limit-limit), 0 if absent. */
+  limit: number;
+}
+
 export interface XClientOptions {
   /** Cookie `auth_token`. Falls back to env AUTH_TOKEN. */
   authToken?: string;
@@ -116,6 +125,14 @@ export interface XClientOptions {
   retries?: number;
   /** Override the sleeper for tests (or rate-limit adapters). */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Override the HTTP client. Plug a TLS-impersonating transport here
+   * (e.g. a curl-impersonate wrapper) to mimic Chrome's TLS fingerprint.
+   * Defaults to the global fetch.
+   */
+  fetch?: typeof fetch;
+  /** Called after each response that carries x-rate-limit-* headers. */
+  onRateLimit?: (info: RateLimitInfo) => void;
 }
 
 export interface Tweet {
@@ -156,6 +173,9 @@ export class XClient {
   private bearer: string;
   private retries: number;
   private sleep: (ms: number) => Promise<void>;
+  private fetchImpl: typeof fetch;
+  private onRateLimit?: (info: RateLimitInfo) => void;
+  private lastRateLimit: RateLimitInfo | null = null;
 
   constructor(opts: XClientOptions = {}) {
     const authToken = opts.authToken ?? process.env.AUTH_TOKEN;
@@ -170,6 +190,31 @@ export class XClient {
     this.bearer = opts.bearer ?? DEFAULT_BEARER;
     this.retries = opts.retries ?? 3;
     this.sleep = opts.sleep ?? (async (ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    this.fetchImpl = opts.fetch ?? globalThis.fetch;
+    this.onRateLimit = opts.onRateLimit;
+  }
+
+  /** Last rate-limit info seen on a response, or null before the first API call. */
+  getLastRateLimit(): RateLimitInfo | null {
+    return this.lastRateLimit;
+  }
+
+  private async fetchWithTracking(
+    url: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const res = await this.fetchImpl(url as any, init as any);
+    const remaining = res.headers.get("x-rate-limit-remaining");
+    if (remaining !== null) {
+      const info: RateLimitInfo = {
+        remaining: Number(remaining),
+        reset: Number(res.headers.get("x-rate-limit-reset")) || 0,
+        limit: Number(res.headers.get("x-rate-limit-limit")) || 0,
+      };
+      this.lastRateLimit = info;
+      this.onRateLimit?.(info);
+    }
+    return res;
   }
 
   private baseHeaders(): Record<string, string> {
@@ -221,7 +266,7 @@ export class XClient {
         headers["referer"] = "https://x.com/compose/post";
         const body: Record<string, unknown> = { variables, queryId: qid };
         if (features) body.features = features;
-        res = await fetch(url, {
+        res = await this.fetchWithTracking(url, {
           method: "POST",
           headers,
           body: JSON.stringify(body),
@@ -232,7 +277,7 @@ export class XClient {
         });
         if (features) params.set("features", JSON.stringify(features));
         if (fieldToggles) params.set("fieldToggles", JSON.stringify(fieldToggles));
-        res = await fetch(`${url}?${params.toString()}`, { method: "GET", headers });
+        res = await this.fetchWithTracking(`${url}?${params.toString()}`, { method: "GET", headers });
       }
 
       // Hard HTTP rate limit -> honor x-rate-limit-reset.
@@ -280,7 +325,7 @@ export class XClient {
     for (let attempt = 0; attempt < this.retries; attempt++) {
       const tx = await getTransaction({ cookie });
       const tid = await tx.generateTransactionId("POST", apiPath);
-      const res = await fetch(url, {
+      const res = await this.fetchWithTracking(url, {
         method: "POST",
         headers: {
           ...this.baseHeaders(),
@@ -316,7 +361,7 @@ export class XClient {
     for (let attempt = 0; attempt < this.retries; attempt++) {
       const tx = await getTransaction({ cookie });
       const tid = await tx.generateTransactionId("GET", apiPath);
-      const res = await fetch(url, {
+      const res = await this.fetchWithTracking(url, {
         method: "GET",
         headers: { ...this.baseHeaders(), "x-client-transaction-id": tid },
       });
@@ -346,7 +391,7 @@ export class XClient {
     for (let attempt = 0; attempt < this.retries; attempt++) {
       const tx = await getTransaction({ cookie });
       const tid = await tx.generateTransactionId("POST", apiPath);
-      const res = await fetch(url, {
+      const res = await this.fetchWithTracking(url, {
         method: "POST",
         headers: {
           ...this.baseHeaders(),
@@ -652,7 +697,7 @@ export class XClient {
    * (deleted, private, or non-existent tweet).
    */
   async getTweetPublic(tweetId: string): Promise<any> {
-    const res = await fetch(`https://api.fxtwitter.com/status/${tweetId}`);
+    const res = await this.fetchWithTracking(`https://api.fxtwitter.com/status/${tweetId}`);
     if (!res.ok) return null;
     const data = await res.json().catch(() => null);
     if (data?.code !== 200 || !data?.tweet) return null;

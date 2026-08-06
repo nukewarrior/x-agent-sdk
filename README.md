@@ -186,11 +186,20 @@ await x.bookmark(id);
 | `getNotifications(count?)` | raw | Likes, follows, replies |
 | `getMentions(count?)` | raw | Tweets mentioning you |
 | `myUserId()` | `string` | Your account's numeric id, cached |
+| `getLastRateLimit()` | `RateLimitInfo \| null` | Last `x-rate-limit-remaining/reset/limit` seen, or `null` before the first call |
 | `getTweet(id)` | raw response | Full `TweetDetail` payload |
 | `getTweetPublic(id)` | parsed tweet \| `null` | **No cookies needed** — reads via the public FxTwitter API. `null` if deleted/private/non-existent |
 | `getThread(id)` | `{ root, replies }` | Parsed likes/replies/views — use this over `getTweet` for engagement |
 
 `new XClient({ retries })` sets the retry budget for `344`/`429` (default 3).
+
+Two more options for agent-facing code:
+
+- `new XClient({ fetch })` injects a custom HTTP client — plug a
+  curl-impersonate-style transport here to mimic Chrome's TLS fingerprint.
+- `new XClient({ onRateLimit })` fires with `{ remaining, reset, limit }`
+  after each response that carries X's rate-limit headers; `getLastRateLimit()`
+  returns the last one. Call it before a burst to check the remaining budget.
 
 ---
 
@@ -375,7 +384,8 @@ const aiTools = Object.fromEntries(
   `"...must be defined"`. `getTweet` already sends the validated set.
 - **TLS fingerprint.** `fetch` doesn't mimic Chrome's JA3. The transaction-id clears
   the common blocks, but for very high sustained volume a real browser (Playwright)
-  remains the safest transport.
+  remains the safest transport — or pass a curl-impersonate wrapper via the `fetch`
+  option to speak with Chrome's TLS fingerprint.
 
 ---
 
