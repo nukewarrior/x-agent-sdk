@@ -367,6 +367,74 @@ account to use before it posts.
 
 ---
 
+## Watch mode (for agents)
+
+X has no push channel (no webhooks, no streaming) on the cookie API — the web
+app itself polls. So watch means: poll with the `*Page` methods, diff tweet
+ids, and report only what is new. A scheduled script beats a long-lived loop:
+same result, a fraction of the rate-limit cost.
+
+```js
+// watch.mjs — prints only new tweets for a search; run on a schedule.
+// A copy lives in the repo at examples/watch.mjs.
+import { readFileSync, appendFileSync, writeFileSync } from "node:fs";
+import { XClient } from "x-agent-sdk";
+
+const x = new XClient(); // AUTH_TOKEN / CT0 from env
+const QUERY = process.env.WATCH_QUERY ?? "typescript"; // search to watch
+const STATE = process.env.WATCH_STATE ?? ".watch-state"; // dedup state
+const LOG = process.env.WATCH_LOG; // optional: append to a markdown log
+
+// State file: first line is the last known rate-limit budget ("rl:N").
+let body = "";
+try {
+  body = readFileSync(STATE, "utf8");
+} catch {
+  /* first run: no state yet */
+}
+const [head = "", ...rest] = body.split("\n");
+const lastRemaining = Number(head.replace(/^rl:/, ""));
+if (lastRemaining > 0 && lastRemaining <= 5) process.exit(0); // low budget
+
+const seen = new Set(rest.filter(Boolean));
+const { items } = await x.searchPage(QUERY, 10, "Latest");
+
+const fresh = items.filter((t) => t.id && !seen.has(t.id));
+for (const t of fresh) {
+  console.log(`[${t.author ?? "unknown"}] ${t.text}\n${t.url}`);
+  if (LOG) appendFileSync(LOG, `- **${t.author ?? "unknown"}** — ${t.text}\n  ${t.url}\n`);
+  seen.add(t.id);
+}
+
+const rl = x.getLastRateLimit();
+writeFileSync(STATE, `rl:${rl?.remaining ?? "?"}\n${[...seen].join("\n")}`);
+```
+
+In Hermes this is a cron job with `no_agent`: the script runs on schedule and
+its stdout is delivered verbatim — silent when nothing is new, so you only
+hear about fresh tweets:
+
+```bash
+mkdir -p ~/.hermes/scripts
+cp examples/watch.mjs ~/.hermes/scripts/watch-x.mjs
+hermes cron add watch-x --schedule "every 15m" \
+  --script ~/.hermes/scripts/watch-x.mjs \
+  --no-agent --deliver origin
+# exact flags: hermes cron add --help
+```
+
+Set `AUTH_TOKEN` / `CT0` in the environment the Hermes scheduler runs in.
+Intervals: 10-15 minutes is the safe 24/7 default; 1-5 minutes works for
+near-real-time (the web app itself polls every ~30-60 s). The example skips a
+tick silently when the rate-limit budget runs low — tune it with
+`getLastRateLimit()`. Set `WATCH_LOG` to append every new tweet to a markdown
+file: that file becomes the long-running conversation. To keep every cron
+delivery in one chat thread instead, enable the job's `attach_to_session`
+option (see `hermes cron add --help`). `STATE` is relative to the job's
+working directory.
+
+---
+
 ## Use the tool defs with the Vercel AI SDK (or any framework)
 
 The tool definitions are exported runtime-agnostic (Zod schema + `execute`), so you

@@ -112,6 +112,18 @@ configured one).
 {"default":{"authToken":"...","ct0":"..."},"work":{"authToken":"...","ct0":"..."}}
 ```
 
+## Watch mode
+
+X has no push channel (no webhooks, no streaming) on the cookie API. To
+monitor a timeline or search, poll with the `*Page` methods, diff tweet ids
+against a state file, and report only new items. Prefer a scheduled script
+(cron with `no_agent` — silent when nothing is new) over a long-lived loop.
+Intervals: 10-15 minutes is the safe 24/7 default; 1-5 minutes works for
+short bursts. Skip ticks when `getLastRateLimit()` shows a low budget. For a
+long conversation, append new tweets to a markdown log or deliver every tick
+into one chat thread (`attach_to_session`). Keep each run fast — Hermes cron
+interrupts runs after 3 minutes.
+
 ## Safety rules (important)
 
 - **Write actions are public and irreversible-ish.** Prefer read methods when
