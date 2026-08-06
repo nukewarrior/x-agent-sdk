@@ -93,7 +93,7 @@ header for you, in-process, on every call — with zero third-party crypto.
 ## Install
 
 ```bash
-bun add x-agent-sdk          # or:  npm install x-agent-sdk
+npm install x-agent-sdk        # or:  bun add x-agent-sdk
 ```
 
 Installing from source instead (git clone): run `bun install && bun run build` first.
