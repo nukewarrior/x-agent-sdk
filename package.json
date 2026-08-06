@@ -1,6 +1,6 @@
 {
   "name": "x-agent-sdk",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Unofficial X (Twitter) client + MCP server. Cookie auth, no paid API.",
   "type": "module",
   "license": "MIT",
