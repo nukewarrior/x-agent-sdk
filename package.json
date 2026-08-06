@@ -1,0 +1,68 @@
+{
+  "name": "x-agent-client",
+  "version": "0.1.1",
+  "description": "Agent-native client for X (Twitter) via its internal GraphQL API. Cookie auth, automatic x-client-transaction-id, and a ready-to-plug MCP server so AI agents can post, read and search X with zero glue code.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "twitter",
+    "x",
+    "mcp",
+    "ai-agent",
+    "llm",
+    "tools",
+    "graphql",
+    "automation"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./tools": {
+      "types": "./dist/tools.d.ts",
+      "import": "./dist/tools.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp.d.ts",
+      "import": "./dist/mcp.js"
+    }
+  },
+  "bin": {
+    "x-agent-mcp": "dist/mcp.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "author": "Alarok",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alarok/x-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alarok/x-agent/issues"
+  },
+  "homepage": "https://github.com/alarok/x-agent#readme",
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "dev:mcp": "bun run src/mcp.ts",
+    "start:mcp": "node dist/mcp.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "node-html-parser": "^9.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
