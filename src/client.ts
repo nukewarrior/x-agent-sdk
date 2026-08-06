@@ -645,6 +645,33 @@ export class XClient {
     );
   }
 
+  /**
+   * Read a tweet without cookies via the public FxTwitter API
+   * (api.fxtwitter.com). No auth, no rate-limit risk on the X account.
+   * Returns the parsed tweet or null if FxTwitter cannot resolve it
+   * (deleted, private, or non-existent tweet).
+   */
+  async getTweetPublic(tweetId: string): Promise<any> {
+    const res = await fetch(`https://api.fxtwitter.com/status/${tweetId}`);
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (data?.code !== 200 || !data?.tweet) return null;
+    const t = data.tweet;
+    return {
+      id: t.id,
+      text: t.text,
+      author: t.author?.screen_name,
+      author_name: t.author?.name,
+      created_at: t.created_at,
+      likes: t.likes,
+      retweets: t.retweets,
+      replies: t.replies,
+      views: t.views,
+      url: t.url,
+      media: t.media?.all?.map((m: any) => m.url) ?? [],
+    };
+  }
+
   /** Convenience: return { root: {likes,replies,...}, replies: [{author,text,likes}] } for a tweet. */
   async getThread(tweetId: string): Promise<{
     root: { id?: string; text?: string; likes?: number; replies?: number; retweets?: number; views?: string };

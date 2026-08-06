@@ -97,10 +97,10 @@ describe("x-agent MCP server", () => {
     expect(res.result.serverInfo.name).toBe("x-agent");
   });
 
-  test("tools/list exposes 24 tools with expected names", async () => {
+  test("tools/list exposes 25 tools with expected names", async () => {
     const res = await rpc("tools/list");
     const names = (res.result.tools as { name: string }[]).map((t) => t.name);
-    expect(names.length).toBe(24);
+    expect(names.length).toBe(25);
     for (const expected of [
       "post_tweet",
       "quote_tweet",

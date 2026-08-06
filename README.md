@@ -183,6 +183,7 @@ await x.bookmark(id);
 | `getMentions(count?)` | raw | Tweets mentioning you |
 | `myUserId()` | `string` | Your account's numeric id, cached |
 | `getTweet(id)` | raw response | Full `TweetDetail` payload |
+| `getTweetPublic(id)` | parsed tweet \| `null` | **No cookies needed** — reads via the public FxTwitter API. `null` if deleted/private/non-existent |
 | `getThread(id)` | `{ root, replies }` | Parsed likes/replies/views — use this over `getTweet` for engagement |
 
 `new XClient({ retries })` sets the retry budget for `344`/`429` (default 3).
@@ -251,6 +252,7 @@ Restart the agent. It now has these tools:
 | `get_likes` | Tweets a user liked |
 | `get_followers` / `get_following` | List followers / following |
 | `get_tweet` | Raw tweet + thread |
+| `get_tweet_public` | Read a tweet **without cookies** (public FxTwitter API). `null` if deleted/private |
 | `get_thread` | Clean `{ root: {likes, replies, ...}, replies: [...] }` |
 | `home_timeline` | The For You timeline |
 | `send_dm` | Send a direct message by user id |

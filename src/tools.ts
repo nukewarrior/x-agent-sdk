@@ -200,6 +200,15 @@ export const tools = [
     },
   }),
   def({
+    name: "get_tweet_public",
+    description:
+      "Read a tweet WITHOUT cookies via the public FxTwitter API. No auth needed, no rate-limit risk on the account. Returns id, text, author, likes, retweets, replies, views, media. Returns null if the tweet is deleted, private, or non-existent.",
+    inputSchema: { tweet_id: z.string() },
+    async execute(client, { tweet_id }) {
+      return client.getTweetPublic(tweet_id);
+    },
+  }),
+  def({
     name: "get_thread",
     description:
       "Get a tweet's engagement and replies in a clean shape: { root: {likes, replies, retweets, views, text}, replies: [{author, text, likes}] }. Use this to check likes on a tweet or read the replies people left.",
