@@ -6,6 +6,11 @@
 #   ./scripts/release.sh minor      # bump minor (0.1.9 -> 0.2.0)
 #   ./scripts/release.sh major      # bump major (0.1.9 -> 1.0.0)
 #   ./scripts/release.sh 0.2.0      # set an explicit version
+#   ./scripts/release.sh --force    # release even without src/ changes
+#
+# Policy: releases are for code (src/, dependencies). Docs, examples, and
+# scripts go to main without a release; the npm README syncs at the next
+# code release. Pass --force for the rare exception.
 #
 # Requirements: bun, npm (logged in as publisher), gh (authenticated).
 set -euo pipefail
@@ -14,6 +19,23 @@ cd "$(dirname "$0")/.."
 if [ -n "$(git status --porcelain)" ]; then
   echo "error: working tree is not clean. Commit or stash first." >&2
   exit 1
+fi
+
+FORCE=0
+if [ "${1:-}" = "--force" ]; then
+  FORCE=1
+  shift
+fi
+
+LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+if [ "$FORCE" -eq 0 ] && [ -n "$LAST_TAG" ]; then
+  CHANGED=$(git diff --name-only "$LAST_TAG" HEAD |
+    grep -vE '^(README\.md|SKILL\.md|examples/|scripts/|LICENSE|\.gitignore)' || true)
+  if [ -z "$CHANGED" ]; then
+    echo "error: no code changes since $LAST_TAG (docs/example/script only)." >&2
+    echo "Commit and release later, or run: ./scripts/release.sh --force" >&2
+    exit 1
+  fi
 fi
 
 NEXT=$(npm version "${1:-patch}" --no-git-tag-version)
