@@ -146,8 +146,8 @@ add to `~/.hermes/config.yaml`:
 ```yaml
 mcp_servers:
   x:
-    command: "node"
-    args: ["/absolute/path/to/x-agent/dist/mcp.js"]
+    command: "npx"
+    args: ["-y", "x-agent-mcp"]
     env:
       AUTH_TOKEN: "..."
       CT0: "..."
@@ -156,8 +156,8 @@ mcp_servers:
 Restart Hermes. The X tools appear in every session as `mcp_x_*`.
 
 > Setup pitfall: register the server with `hermes mcp add` (pipe `y` into
-> the interactive prompt): `echo "y" | hermes mcp add x --command node
-> --env AUTH_TOKEN=... CT0=... --args /path/to/dist/mcp.js`.
+> the interactive prompt): `echo "y" | hermes mcp add x --command npx
+> --env AUTH_TOKEN=... CT0=... --args -y x-agent-mcp`.
 > `hermes config set` stores `args` as a plain string and breaks the server
 > (`Cannot find module '['` / `Invalid tag name "["`).
 

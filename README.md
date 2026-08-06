@@ -45,9 +45,11 @@ Workflow:
    Or install once and run it:
    npm install -g x-agent-sdk && x-agent-mcp
 3. Register the MCP server with the MCP client already installed on this
-   machine (command: npx, args: ["-y", "x-agent-mcp"]). If the client is
-   unclear, inspect the local configuration and ask me before making
-   assumptions.
+   machine. If the client is Claude Code, use:
+   claude mcp add x-agent --env AUTH_TOKEN=... --env CT0=... -- npx -y x-agent-mcp
+   For Hermes or other clients, follow the config blocks in the README.
+   If the client is unclear, inspect the local configuration and ask me
+   before making assumptions.
 4. x-agent requires these private environment variables:
    - AUTH_TOKEN: the auth_token cookie from a logged-in x.com session
    - CT0: the ct0 cookie from that same session
@@ -197,7 +199,7 @@ schemas. No prompt engineering, no wiring.
 
 ### Config
 
-Add to your agent's MCP config (**Claude Desktop**, **Cursor**, **iris**, **Windsurf**, ...):
+**Any MCP client (Claude Desktop, Cursor, Windsurf, ...)** — add to the MCP config:
 
 ```jsonc
 {
@@ -214,18 +216,25 @@ Add to your agent's MCP config (**Claude Desktop**, **Cursor**, **iris**, **Wind
 }
 ```
 
-Or point at a local build:
+**Claude Code** — one command, no JSON file:
 
-```jsonc
-{
-  "mcpServers": {
-    "x": {
-      "command": "node",
-      "args": ["/absolute/path/to/x-agent/dist/mcp.js"],
-      "env": { "AUTH_TOKEN": "...", "CT0": "..." }
-    }
-  }
-}
+```bash
+claude mcp add x-agent \
+  --env AUTH_TOKEN=your_auth_token_cookie \
+  --env CT0=your_ct0_cookie \
+  -- npx -y x-agent-mcp
+```
+
+**Hermes Agent** — add to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  x:
+    command: "node"
+    args: ["/absolute/path/to/x-agent/dist/mcp.js"]
+    env:
+      AUTH_TOKEN: "..."
+      CT0: "..."
 ```
 
 Restart the agent. It now has these tools:
