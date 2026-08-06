@@ -43,12 +43,12 @@
   "author": "Alarok",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alarok/x-agent.git"
+    "url": "git+https://github.com/alarok/x-agent-sdk.git"
   },
   "bugs": {
-    "url": "https://github.com/alarok/x-agent/issues"
+    "url": "https://github.com/alarok/x-agent-sdk/issues"
   },
-  "homepage": "https://github.com/alarok/x-agent#readme",
+  "homepage": "https://github.com/alarok/x-agent-sdk#readme",
   "scripts": {
     "build": "tsc",
     "test": "bun test",

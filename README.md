@@ -9,7 +9,7 @@
 Use it as a typed TypeScript library, or drop in its MCP server so agents connect directly.
 All through the same private GraphQL API the web app uses.
 
-Cookie auth · no OAuth · no paid API · automatic `x-client-transaction-id` · built-in MCP server
+Cookie auth · no OAuth · no paid API · automatic `x-client-transaction-id` · multi-account · cookie-free public reads · built-in MCP server
 
 </div>
 
@@ -53,6 +53,7 @@ Workflow:
 4. x-agent requires these private environment variables:
    - AUTH_TOKEN: the auth_token cookie from a logged-in x.com session
    - CT0: the ct0 cookie from that same session
+   - For multiple accounts, use X_ACCOUNTS instead (see "Multiple accounts").
    Ask me for them if they are not already configured. Never print, log,
    commit, expose, or include either value in command output.
 5. Verify setup with a read-only action, such as get_user for username "x".
@@ -120,6 +121,9 @@ Copy them from your browser's dev tools while logged in at `x.com`:
 | Safari | Develop → **Show Web Inspector** → **Storage** → **Cookies** (enable the Develop menu first: Settings → Advanced → *Show features for web developers*) |
 
 Provide via env (`AUTH_TOKEN`, `CT0`) or pass to the constructor.
+
+Need more than one account? Every `XClient` holds one account's cookies, so
+create one client per account — see [Multiple accounts](#multiple-accounts).
 
 ---
 
@@ -192,7 +196,7 @@ await x.bookmark(id);
 
 ## Use it as an MCP server (recommended for agents)
 
-Connect the MCP server and the agent auto-discovers all 24 tools — names,
+Connect the MCP server and the agent auto-discovers all 25 tools — names,
 descriptions, JSON schemas. No glue code.
 
 ### Config
@@ -272,6 +276,64 @@ AUTH_TOKEN=... CT0=... npx -y x-agent-mcp
 
 ---
 
+## Multiple accounts
+
+One `XClient` holds one account's cookies. Use the library with several
+accounts by creating one client per account:
+
+```ts
+const work = new XClient({ authToken: "...", ct0: "..." });
+const personal = new XClient({ authToken: "...", ct0: "..." });
+
+await work.postTweet("from the work account");
+await personal.postTweet("from the personal account");
+```
+
+The MCP server takes it further: pass `X_ACCOUNTS` — a JSON object mapping an
+account name to its cookies — and every tool gains an optional `account`
+param to pick which account to use. Omit `account` to use the `default`
+account (or the only configured one). Unknown names fail with the list of
+available accounts.
+
+```jsonc
+{
+  "mcpServers": {
+    "x": {
+      "command": "npx",
+      "args": ["-y", "x-agent-mcp"],
+      "env": {
+        "X_ACCOUNTS": "{\"default\":{\"authToken\":\"...\",\"ct0\":\"...\"},\"work\":{\"authToken\":\"...\",\"ct0\":\"...\"}}"
+      }
+    }
+  }
+}
+```
+
+**Claude Code:**
+
+```bash
+claude mcp add x-agent \
+  --env 'X_ACCOUNTS={"default":{"authToken":"...","ct0":"..."},"work":{"authToken":"...","ct0":"..."}}' \
+  -- npx -y x-agent-mcp
+```
+
+**Hermes Agent** (`~/.hermes/config.yaml`):
+
+```yaml
+mcp_servers:
+  x:
+    command: "npx"
+    args: ["-y", "x-agent-mcp"]
+    env:
+      X_ACCOUNTS: '{"default":{"authToken":"...","ct0":"..."},"work":{"authToken":"...","ct0":"..."}}'
+```
+
+`X_ACCOUNTS` wins over `AUTH_TOKEN` / `CT0` when both are set. Write actions
+are public — when an agent manages several accounts, tell it explicitly which
+account to use before it posts.
+
+---
+
 ## Use the tool defs with the Vercel AI SDK (or any framework)
 
 The tool definitions are exported runtime-agnostic (Zod schema + `execute`), so you
@@ -322,9 +384,10 @@ const aiTools = Object.fromEntries(
 ```
 src/
   transaction.ts   x-client-transaction-id generator (zero third-party crypto)
+  accounts.ts      MCP account loading (X_ACCOUNTS / AUTH_TOKEN+CT0)
   client.ts        XClient — typed methods, 344/429 backoff
-  tools.ts         24 runtime-agnostic tool defs (Zod schemas)
-  mcp.ts           MCP stdio server (bin: x-agent-mcp)
+  tools.ts         25 runtime-agnostic tool defs (Zod schemas)
+  mcp.ts           MCP stdio server (bin: x-agent-mcp), multi-account routing
   index.ts         public exports
 dist/              compiled output (what actually runs)
 ```

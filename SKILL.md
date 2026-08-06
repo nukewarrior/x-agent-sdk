@@ -35,7 +35,7 @@ node dist/mcp.js     # run the compiled MCP server (production)
 ## Setup
 
 ```bash
-git clone https://github.com/alarok/x-agent.git
+git clone https://github.com/alarok/x-agent-sdk.git
 cd x-agent
 bun install
 bun run build          # compiles src/ -> dist/
@@ -97,11 +97,28 @@ for (const t of await x.search("typescript", 10, "Latest")) {
 }
 ```
 
+## Multiple accounts
+
+One `XClient` holds one account's cookies. For several accounts, create one
+client per account (pass `authToken` / `ct0` to each constructor).
+
+The MCP server reads `X_ACCOUNTS` (JSON object mapping account name to
+cookies) when set; `AUTH_TOKEN` / `CT0` remain the single-account path and
+`X_ACCOUNTS` wins over them. With `X_ACCOUNTS`, every tool accepts an
+optional `account` param. Omit it to use the `default` account (or the only
+configured one).
+
+```json
+{"default":{"authToken":"...","ct0":"..."},"work":{"authToken":"...","ct0":"..."}}
+```
+
 ## Safety rules (important)
 
 - **Write actions are public and irreversible-ish.** Prefer read methods when
   testing; if you must post, keep it a throwaway test tweet and offer to delete
   it (`deleteTweet`).
+- **State the account before a write action** when several accounts are
+  configured — pass `account` explicitly; never assume which account posts.
 - **Never mass-post, mass-follow, or spam** — that gets the account flagged
   or suspended.
 - **The account can be rate-limited, shadow-banned, or suspended.** Use at
@@ -122,6 +139,9 @@ for (const t of await x.search("typescript", 10, "Latest")) {
 
 ## API quirks (verified)
 
+- **`getTweetPublic(id)` needs no cookies** — it reads via the public FxTwitter
+  API, so it works without login and never touches the account's rate limit.
+  Returns `null` for deleted, private, or non-existent tweets.
 - **No `getMe` tool.** Own profile = `restGet("1.1/account/verify_credentials.json")`
   → `screen_name`, `id_str`, `name`, `description`; counts under `legacy`.
   `myUserId()` returns just the id.
