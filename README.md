@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/alarok/x-agent/main/assets/x-agent-x-header.png" alt="x-agent banner" width="100%" />
+<img src="https://raw.githubusercontent.com/alarok/x-agent-sdk/main/assets/x-agent-x-header.png" alt="x-agent banner" width="100%" />
 
 # x-agent
 
@@ -33,17 +33,17 @@ below to your agent to wire the MCP server up on this machine.
 Set up x-agent on this machine.
 
 The package is on npm:
-  https://www.npmjs.com/package/x-agent-client
+  https://www.npmjs.com/package/x-agent-sdk
 The source and agent guide live at:
-  https://github.com/alarok/x-agent
+  https://github.com/alarok/x-agent-sdk
 
 Workflow:
 1. Read the full agent guide first:
-   https://github.com/alarok/x-agent/blob/main/SKILL.md
+   https://github.com/alarok/x-agent-sdk/blob/main/SKILL.md
 2. Start the MCP server without installing anything:
    npx -y x-agent-mcp
    Or install once and run it:
-   npm install -g x-agent-client && x-agent-mcp
+   npm install -g x-agent-sdk && x-agent-mcp
 3. Register the MCP server with the MCP client already installed on this
    machine (command: npx, args: ["-y", "x-agent-mcp"]). If the client is
    unclear, inspect the local configuration and ask me before making
@@ -93,8 +93,8 @@ header for you, in-process, on every call — with zero third-party crypto.
 ## Install
 
 ```bash
-bun add x-agent-client          # or:  npm install x-agent-client
-cd node_modules/x-agent-client && npm run build   # if installing from source, compile TS -> dist/
+bun add x-agent-sdk          # or:  npm install x-agent-sdk
+cd node_modules/x-agent-sdk && npm run build   # if installing from source, compile TS -> dist/
 ```
 
 Runs on **Node 18+** and **Bun**. Dependencies are all generic infrastructure:
@@ -126,7 +126,7 @@ Provide via env (`AUTH_TOKEN`, `CT0`) or pass to the constructor.
 ## Quick start (library)
 
 ```ts
-import { XClient } from "x-agent-client";
+import { XClient } from "x-agent-sdk";
 
 const x = new XClient();               // reads AUTH_TOKEN / CT0 from env
 // const x = new XClient({ authToken: "...", ct0: "..." });
@@ -270,8 +270,8 @@ The tool definitions are exported runtime-agnostic (Zod schema + `execute`), so 
 can wire them into any agent runtime, not just MCP:
 
 ```ts
-import { XClient } from "x-agent-client";
-import { tools } from "x-agent-client/tools";
+import { XClient } from "x-agent-sdk";
+import { tools } from "x-agent-sdk/tools";
 import { tool } from "ai";
 import { z } from "zod";
 

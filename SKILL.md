@@ -86,7 +86,7 @@ vars are forwarded to the subprocess.
 ## Use as a library
 
 ```ts
-import { XClient } from "x-agent-client";
+import { XClient } from "x-agent-sdk";
 
 const x = new XClient(); // reads AUTH_TOKEN / CT0 from env
 const id = await x.postTweet("hello from an agent");
