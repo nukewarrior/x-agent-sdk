@@ -155,6 +155,12 @@ export interface XUser {
   description: string | undefined;
 }
 
+/** One page of a paginated timeline. `next_cursor` is null on the last page. */
+export interface Page<T> {
+  items: T[];
+  next_cursor: string | null;
+}
+
 export class XError extends Error {
   code?: number;
   constructor(message: string, code?: number) {
@@ -587,24 +593,50 @@ export class XClient {
     return d.data.user.result;
   }
 
+  /** Recent tweets by a user. Use `getUserTweetsPage` for pagination. */
   async getUserTweets(userId: string, count = 20): Promise<Tweet[]> {
+    return (await this.getUserTweetsPage(userId, count)).items;
+  }
+
+  /** One page of a user's tweets; pass `cursor` (from `next_cursor`) for the next page. */
+  async getUserTweetsPage(
+    userId: string,
+    count = 20,
+    cursor?: string,
+  ): Promise<Page<Tweet>> {
     const d = await this.request(
       "GET",
       "UserTweets",
-      { userId: String(userId), count, includePromotedContent: false },
+      { userId: String(userId), count, includePromotedContent: false, ...(cursor ? { cursor } : {}) },
       FEATURES_READ,
     );
-    return extractTimelineTweets(d);
+    return {
+      items: extractTimelineTweets(d),
+      next_cursor: bottomCursor(d?.data?.user?.result?.timeline_v2?.timeline?.instructions),
+    };
   }
 
+  /** Tweets a user liked. Use `getLikesPage` for pagination. */
   async getLikes(userId: string, count = 20): Promise<Tweet[]> {
+    return (await this.getLikesPage(userId, count)).items;
+  }
+
+  /** One page of liked tweets; pass `cursor` for the next page. */
+  async getLikesPage(
+    userId: string,
+    count = 20,
+    cursor?: string,
+  ): Promise<Page<Tweet>> {
     const d = await this.request(
       "GET",
       "Likes",
-      { userId: String(userId), count, includePromotedContent: false },
+      { userId: String(userId), count, includePromotedContent: false, ...(cursor ? { cursor } : {}) },
       FEATURES_READ,
     );
-    return extractTimelineTweets(d);
+    return {
+      items: extractTimelineTweets(d),
+      next_cursor: bottomCursor(d?.data?.user?.result?.timeline_v2?.timeline?.instructions),
+    };
   }
 
   /** Follow a user by numeric id. */
@@ -626,44 +658,95 @@ export class XClient {
     return !!d?.id_str;
   }
 
+  /** A user's followers. Use `getFollowersPage` for pagination. */
   async getFollowers(userId: string, count = 20): Promise<XUser[]> {
+    return (await this.getFollowersPage(userId, count)).items;
+  }
+
+  /** One page of followers; pass `cursor` for the next page. */
+  async getFollowersPage(
+    userId: string,
+    count = 20,
+    cursor?: string,
+  ): Promise<Page<XUser>> {
     const d = await this.request(
       "GET",
       "Followers",
-      { userId: String(userId), count, includePromotedContent: false },
+      { userId: String(userId), count, includePromotedContent: false, ...(cursor ? { cursor } : {}) },
       FEATURES_READ,
     );
-    return extractTimelineUsers(d);
+    return {
+      items: extractTimelineUsers(d),
+      next_cursor: bottomCursor(d?.data?.user?.result?.timeline?.timeline?.instructions),
+    };
   }
 
+  /** Who a user follows. Use `getFollowingPage` for pagination. */
   async getFollowing(userId: string, count = 20): Promise<XUser[]> {
+    return (await this.getFollowingPage(userId, count)).items;
+  }
+
+  /** One page of following; pass `cursor` for the next page. */
+  async getFollowingPage(
+    userId: string,
+    count = 20,
+    cursor?: string,
+  ): Promise<Page<XUser>> {
     const d = await this.request(
       "GET",
       "Following",
-      { userId: String(userId), count, includePromotedContent: false },
+      { userId: String(userId), count, includePromotedContent: false, ...(cursor ? { cursor } : {}) },
       FEATURES_READ,
     );
-    return extractTimelineUsers(d);
+    return {
+      items: extractTimelineUsers(d),
+      next_cursor: bottomCursor(d?.data?.user?.result?.timeline?.timeline?.instructions),
+    };
   }
 
+  /** Search tweets. Use `searchPage` for pagination. */
   async search(query: string, count = 20, product: "Top" | "Latest" | "People" | "Media" = "Top"): Promise<Tweet[]> {
+    return (await this.searchPage(query, count, product)).items;
+  }
+
+  /** One page of search results; pass `cursor` for the next page. */
+  async searchPage(
+    query: string,
+    count = 20,
+    product: "Top" | "Latest" | "People" | "Media" = "Top",
+    cursor?: string,
+  ): Promise<Page<Tweet>> {
     const d = await this.request(
       "GET",
       "SearchTimeline",
-      { rawQuery: query, count, querySource: "typed_query", product },
+      { rawQuery: query, count, querySource: "typed_query", product, ...(cursor ? { cursor } : {}) },
       FEATURES_READ,
     );
-    return extractSearchTweets(d);
+    return {
+      items: extractSearchTweets(d),
+      next_cursor: bottomCursor(
+        d?.data?.search_by_raw_query?.search_timeline?.timeline?.instructions,
+      ),
+    };
   }
 
+  /** The For You timeline. Use `homeTimelinePage` for pagination. */
   async homeTimeline(count = 20): Promise<Tweet[]> {
+    return (await this.homeTimelinePage(count)).items;
+  }
+
+  /** One page of the home timeline; pass `cursor` for the next page. */
+  async homeTimelinePage(count = 20, cursor?: string): Promise<Page<Tweet>> {
     const d = await this.request(
       "GET",
       "HomeTimeline",
-      { count, includePromotedContent: true, latestControlAvailable: true },
+      { count, includePromotedContent: true, latestControlAvailable: true, ...(cursor ? { cursor } : {}) },
       FEATURES_READ,
     );
-    return extractTimelineTweets(d);
+    return {
+      items: extractTimelineTweets(d),
+      next_cursor: bottomCursor(d?.data?.user?.result?.timeline_v2?.timeline?.instructions),
+    };
   }
 
   async getTweet(tweetId: string): Promise<any> {
@@ -754,6 +837,21 @@ export class XClient {
     }
     return { root, replies };
   }
+}
+
+/** Last bottom cursor in a timeline's instructions, or null when exhausted. */
+function bottomCursor(instructions: any[] | undefined): string | null {
+  if (!instructions) return null;
+  for (let i = instructions.length - 1; i >= 0; i--) {
+    for (const entry of instructions[i]?.entries ?? []) {
+      const id: string = entry.entryId ?? "";
+      if (id.startsWith("cursor-bottom")) {
+        const v = entry.content?.value;
+        if (typeof v === "string" && v) return v;
+      }
+    }
+  }
+  return null;
 }
 
 function extractTimelineTweets(data: any): Tweet[] {

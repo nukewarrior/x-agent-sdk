@@ -108,3 +108,88 @@ describe("XClient rate limit + injectable fetch", () => {
     expect(used[0]).toContain("/i/api/graphql");
   });
 });
+
+describe("XClient pagination", () => {
+  const timelineBody = (instructions: unknown[]) => ({
+    data: {
+      user: { result: { timeline_v2: { timeline: { instructions } } } },
+    },
+  });
+
+  test("getUserTweetsPage returns items and next_cursor", async () => {
+    apiHandler = () => ({
+      status: 200,
+      body: timelineBody([
+        {
+          entries: [
+            {
+              entryId: "tweet-1",
+              content: {
+                itemContent: {
+                  tweet_results: {
+                    result: { legacy: { id_str: "1", full_text: "hi", created_at: "" } },
+                  },
+                },
+              },
+            },
+          ],
+        },
+        { entries: [{ entryId: "cursor-bottom-abc", content: { value: "|F|cursor|123|" } }] },
+      ]),
+    });
+    const x = new XClient(opts);
+    const page = await x.getUserTweetsPage("42", 20);
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0].id).toBe("1");
+    expect(page.next_cursor).toBe("|F|cursor|123|");
+  });
+
+  test("plain methods still return arrays", async () => {
+    apiHandler = () => ({ status: 200, body: timelineBody([]) });
+    const x = new XClient(opts);
+    const tweets = await x.getUserTweets("42", 20);
+    expect(Array.isArray(tweets)).toBe(true);
+  });
+
+  test("cursor is sent as a GraphQL variable", async () => {
+    apiHandler = () => ({ status: 200, body: timelineBody([]) });
+    const x = new XClient(opts);
+    await x.getUserTweetsPage("42", 20, "|F|next|");
+    const apiCall = calls.find((c) => c.url.includes("UserTweets"));
+    expect(apiCall).toBeDefined();
+    const variables = JSON.parse(
+      new URL(apiCall!.url).searchParams.get("variables") ?? "{}",
+    );
+    expect(variables.cursor).toBe("|F|next|");
+  });
+
+  test("next_cursor is null when the timeline has no cursor entry", async () => {
+    apiHandler = () => ({ status: 200, body: timelineBody([]) });
+    const x = new XClient(opts);
+    const page = await x.getUserTweetsPage("42", 20);
+    expect(page.next_cursor).toBeNull();
+  });
+
+  test("searchPage digs its own timeline path", async () => {
+    apiHandler = () => ({
+      status: 200,
+      body: {
+        data: {
+          search_by_raw_query: {
+            search_timeline: {
+              timeline: {
+                instructions: [
+                  { entries: [{ entryId: "cursor-bottom-search", content: { value: "|S|123|" } }] },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    const x = new XClient(opts);
+    const page = await x.searchPage("bun", 20, "Latest", "|S|123|");
+    expect(page.items).toEqual([]);
+    expect(page.next_cursor).toBe("|S|123|");
+  });
+});

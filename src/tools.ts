@@ -120,14 +120,16 @@ export const tools = [
   def({
     name: "search_tweets",
     description:
-      "Search X for tweets. `product` picks the tab: Top (default), Latest (chronological), People, or Media. Returns id, text, author, likes, url.",
+      "Search X for tweets. `product` picks the tab: Top (default), Latest (chronological), People, or Media. Returns id, text, author, likes, url plus `next_cursor` — pass it as `cursor` to fetch the next page.",
     inputSchema: {
       query: z.string().describe("Search query. Supports X operators: from:user, since:YYYY-MM-DD, filter:media, lang:xx."),
       count: z.number().int().min(1).max(100).default(20),
       product: z.enum(["Top", "Latest", "People", "Media"]).default("Top"),
+      cursor: z.string().optional().describe("Opaque pagination cursor from a previous call's next_cursor."),
     },
-    async execute(client, { query, count, product }) {
-      return { results: await client.search(query, count, product) };
+    async execute(client, { query, count, product, cursor }) {
+      const page = await client.searchPage(query, count, product, cursor);
+      return { results: page.items, next_cursor: page.next_cursor };
     },
   }),
   def({
@@ -149,46 +151,58 @@ export const tools = [
   }),
   def({
     name: "get_user_tweets",
-    description: "Get recent tweets from a user. Give either a numeric user id, or use get_user first to resolve a @username to an id.",
+    description:
+      "Get recent tweets from a user. Give either a numeric user id, or use get_user first to resolve a @username to an id. Returns tweets plus `next_cursor` for pagination.",
     inputSchema: {
       user_id: z.string().describe("Numeric user id (rest_id)."),
       count: z.number().int().min(1).max(100).default(20),
+      cursor: z.string().optional().describe("Opaque pagination cursor from a previous call's next_cursor."),
     },
-    async execute(client, { user_id, count }) {
-      return { tweets: await client.getUserTweets(user_id, count) };
+    async execute(client, { user_id, count, cursor }) {
+      const page = await client.getUserTweetsPage(user_id, count, cursor);
+      return { tweets: page.items, next_cursor: page.next_cursor };
     },
   }),
   def({
     name: "get_likes",
-    description: "Get the tweets a user has liked, by their numeric user id.",
+    description:
+      "Get the tweets a user has liked, by their numeric user id. Returns tweets plus `next_cursor` for pagination.",
     inputSchema: {
       user_id: z.string().describe("Numeric user id (rest_id)."),
       count: z.number().int().min(1).max(100).default(20),
+      cursor: z.string().optional().describe("Opaque pagination cursor from a previous call's next_cursor."),
     },
-    async execute(client, { user_id, count }) {
-      return { tweets: await client.getLikes(user_id, count) };
+    async execute(client, { user_id, count, cursor }) {
+      const page = await client.getLikesPage(user_id, count, cursor);
+      return { tweets: page.items, next_cursor: page.next_cursor };
     },
   }),
   def({
     name: "get_followers",
-    description: "List a user's followers (numeric user id). Returns id, username, name, counts.",
+    description:
+      "List a user's followers (numeric user id). Returns id, username, name, counts plus `next_cursor` for pagination.",
     inputSchema: {
       user_id: z.string().describe("Numeric user id (rest_id)."),
       count: z.number().int().min(1).max(100).default(20),
+      cursor: z.string().optional().describe("Opaque pagination cursor from a previous call's next_cursor."),
     },
-    async execute(client, { user_id, count }) {
-      return { users: await client.getFollowers(user_id, count) };
+    async execute(client, { user_id, count, cursor }) {
+      const page = await client.getFollowersPage(user_id, count, cursor);
+      return { users: page.items, next_cursor: page.next_cursor };
     },
   }),
   def({
     name: "get_following",
-    description: "List the accounts a user follows (numeric user id).",
+    description:
+      "List the accounts a user follows (numeric user id). Returns users plus `next_cursor` for pagination.",
     inputSchema: {
       user_id: z.string().describe("Numeric user id (rest_id)."),
       count: z.number().int().min(1).max(100).default(20),
+      cursor: z.string().optional().describe("Opaque pagination cursor from a previous call's next_cursor."),
     },
-    async execute(client, { user_id, count }) {
-      return { users: await client.getFollowing(user_id, count) };
+    async execute(client, { user_id, count, cursor }) {
+      const page = await client.getFollowingPage(user_id, count, cursor);
+      return { users: page.items, next_cursor: page.next_cursor };
     },
   }),
   def({
@@ -219,10 +233,15 @@ export const tools = [
   }),
   def({
     name: "home_timeline",
-    description: "Get the authenticated account's For You home timeline.",
-    inputSchema: { count: z.number().int().min(1).max(100).default(20) },
-    async execute(client, { count }) {
-      return { tweets: await client.homeTimeline(count) };
+    description:
+      "Get the authenticated account's For You home timeline. Returns tweets plus `next_cursor` for pagination.",
+    inputSchema: {
+      count: z.number().int().min(1).max(100).default(20),
+      cursor: z.string().optional().describe("Opaque pagination cursor from a previous call's next_cursor."),
+    },
+    async execute(client, { count, cursor }) {
+      const page = await client.homeTimelinePage(count, cursor);
+      return { tweets: page.items, next_cursor: page.next_cursor };
     },
   }),
   def({

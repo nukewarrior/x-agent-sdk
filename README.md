@@ -191,6 +191,26 @@ await x.bookmark(id);
 | `getTweetPublic(id)` | parsed tweet \| `null` | **No cookies needed** — reads via the public FxTwitter API. `null` if deleted/private/non-existent |
 | `getThread(id)` | `{ root, replies }` | Parsed likes/replies/views — use this over `getTweet` for engagement |
 
+**Pagination** — every timeline has a `*Page` variant returning `{ items, next_cursor }`:
+
+| Method | Returns | Notes |
+|--------|---------|-------|
+| `getUserTweetsPage(userId, count?, cursor?)` | `Page<Tweet>` | `next_cursor` is `null` on the last page |
+| `getLikesPage(userId, count?, cursor?)` | `Page<Tweet>` | |
+| `getFollowersPage(userId, count?, cursor?)` | `Page<XUser>` | |
+| `getFollowingPage(userId, count?, cursor?)` | `Page<XUser>` | |
+| `searchPage(query, count?, product?, cursor?)` | `Page<Tweet>` | |
+| `homeTimelinePage(count?, cursor?)` | `Page<Tweet>` | |
+
+```ts
+let cursor: string | undefined;
+do {
+  const { items, next_cursor } = await x.searchPage("typescript", 10, "Latest", cursor);
+  for (const t of items) console.log(t.url, "-", t.text);
+  cursor = next_cursor ?? undefined;
+} while (cursor);
+```
+
 `new XClient({ retries })` sets the retry budget for `344`/`429` (default 3).
 
 Two more options for agent-facing code:
@@ -275,6 +295,10 @@ Restart the agent. It now has these tools:
 
 Now you can tell the agent: *"search X for the latest posts about Bun and reply to
 the top one with a question"* — it calls `search_tweets` then `post_tweet` by itself.
+
+Timeline tools (`search_tweets`, `get_user_tweets`, `get_likes`, `get_followers`,
+`get_following`, `home_timeline`) return a `next_cursor`; pass it back as `cursor`
+to fetch the next page.
 
 ### Try the MCP server by hand
 
