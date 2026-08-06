@@ -36,14 +36,23 @@ git tag "v${VERSION}"
 git push origin main --tags
 
 echo "==> GitHub release"
+NOTES_FILE=$(mktemp)
+LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+if [ -n "$LAST_TAG" ]; then
+  echo "## What's Changed" > "$NOTES_FILE"
+  git log --oneline --no-merges "$LAST_TAG"..HEAD | sed 's/^/- /' >> "$NOTES_FILE"
+else
+  echo "Initial release." > "$NOTES_FILE"
+fi
 GHA="$HOME/.local/bin/gha"
 if [ -x "$GHA" ]; then
-  "$GHA" release create "v${VERSION}" --generate-notes --title "v${VERSION}"
+  "$GHA" release create "v${VERSION}" --notes-file "$NOTES_FILE" --title "v${VERSION}"
 elif command -v gh >/dev/null 2>&1; then
-  gh release create "v${VERSION}" --generate-notes --title "v${VERSION}"
+  gh release create "v${VERSION}" --notes-file "$NOTES_FILE" --title "v${VERSION}"
 else
   echo "error: gh CLI not found." >&2
   exit 1
 fi
+rm -f "$NOTES_FILE"
 
 echo "==> Done: v${VERSION} published on npm and GitHub."
