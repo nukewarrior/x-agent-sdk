@@ -1,7 +1,7 @@
 {
   "name": "x-agent-sdk",
-  "version": "0.1.6",
-  "description": "Agent-native client for X (Twitter) via its internal GraphQL API. Cookie auth, automatic x-client-transaction-id, and a ready-to-plug MCP server so AI agents can post, read and search X with zero glue code.",
+  "version": "0.1.7",
+  "description": "Unofficial X (Twitter) client + MCP server. Cookie auth, no paid API.",
   "type": "module",
   "license": "MIT",
   "keywords": [
