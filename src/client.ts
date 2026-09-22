@@ -135,6 +135,13 @@ export interface XClientOptions {
   onRateLimit?: (info: RateLimitInfo) => void;
 }
 
+export interface TweetArticle {
+  id?: string;
+  title?: string;
+  preview_text?: string;
+  plain_text?: string;
+}
+
 export interface Tweet {
   id: string | undefined;
   text: string | undefined;
@@ -144,6 +151,7 @@ export interface Tweet {
   retweets: number | undefined;
   replies?: number | undefined;
   url?: string;
+  article?: TweetArticle;
 }
 
 export interface XUser {
@@ -469,7 +477,7 @@ export class XClient {
       url = tweetUrlOrId;
     } else {
       const detail = await this.getTweet(tweetUrlOrId);
-      const handle = findAuthorHandle(detail);
+      const handle = findAuthorHandle(detail, tweetUrlOrId);
       if (!handle) throw new XError("could not resolve tweet author for quote url");
       url = `https://x.com/${handle}/status/${tweetUrlOrId}`;
     }
@@ -766,7 +774,7 @@ export class XClient {
       FEATURES_READ,
       {
         withArticleRichContentState: true,
-        withArticlePlainText: false,
+        withArticlePlainText: true,
         withGrokAnalyze: false,
         withDisallowedReplyControls: false,
       },
@@ -800,41 +808,47 @@ export class XClient {
     };
   }
 
-  /** Convenience: return { root: {likes,replies,...}, replies: [{author,text,likes}] } for a tweet. */
+  /** Convenience: return a focal tweet plus replies included in TweetDetail. */
   async getThread(tweetId: string): Promise<{
-    root: { id?: string; text?: string; likes?: number; replies?: number; retweets?: number; views?: string };
-    replies: { author?: string; text?: string; likes?: number }[];
+    root: Partial<ParsedTweet>;
+    replies: ParsedTweet[];
   }> {
     const data = await this.getTweet(tweetId);
     const instr = data?.data?.threaded_conversation_with_injections_v2?.instructions ?? [];
-    let root: any = {};
-    const replies: any[] = [];
+    let root: Partial<ParsedTweet> = {};
+    const replies: ParsedTweet[] = [];
+    const seenReplies = new Set<string>();
+
+    const collect = (raw: any, reply: boolean) => {
+      const tweet = parseTweetResult(raw);
+      if (!tweet?.id) return;
+      if (String(tweet.id) === String(tweetId)) {
+        root = tweet;
+        return;
+      }
+      if (reply && !seenReplies.has(tweet.id)) {
+        seenReplies.add(tweet.id);
+        replies.push(tweet);
+      }
+    };
+
     for (const ins of instr) {
       for (const entry of ins.entries ?? []) {
-        const eid: string = entry.entryId ?? "";
-        if (eid.startsWith("tweet-")) {
-          const res = entry.content?.itemContent?.tweet_results?.result;
-          const lg = res?.legacy;
-          if (lg)
-            root = {
-              id: lg.id_str,
-              text: lg.full_text,
-              likes: lg.favorite_count,
-              replies: lg.reply_count,
-              retweets: lg.retweet_count,
-              views: res?.views?.count,
-            };
+        const direct = entry?.content?.itemContent?.tweet_results?.result;
+        if (direct) collect(direct, false);
+
+        for (const raw of tweetModuleResults(entry)) {
+          collect(raw, true);
         }
-        if (eid.startsWith("conversationthread")) {
-          for (const it of entry.content?.items ?? []) {
-            const res = it.item?.itemContent?.tweet_results?.result;
-            const lg = res?.legacy;
-            const user = res?.core?.user_results?.result?.core;
-            if (lg) replies.push({ author: user?.screen_name, text: lg.full_text, likes: lg.favorite_count });
-          }
+      }
+
+      for (const item of ins.moduleItems ?? []) {
+        for (const raw of tweetModuleResults({ content: { items: [item] } })) {
+          collect(raw, true);
         }
       }
     }
+
     return { root, replies };
   }
 }
@@ -854,23 +868,102 @@ function bottomCursor(instructions: any[] | undefined): string | null {
   return null;
 }
 
+type ParsedTweet = Tweet & { views?: string };
+
+function unwrapTweetResult(result: any): any {
+  if (result?.__typename === "TweetWithVisibilityResults" && result?.tweet) {
+    return unwrapTweetResult(result.tweet);
+  }
+  return result;
+}
+
+function tweetModuleResults(entry: any): any[] {
+  const out: any[] = [];
+  for (const item of entry?.content?.items ?? []) {
+    const result = item?.item?.itemContent?.tweet_results?.result;
+    if (result) out.push(result);
+  }
+  return out;
+}
+
+function tweetResultsFromEntry(entry: any): any[] {
+  const out: any[] = [];
+  const direct = entry?.content?.itemContent?.tweet_results?.result;
+  if (direct) out.push(direct);
+  out.push(...tweetModuleResults(entry));
+  return out;
+}
+
+function parseTweetResult(rawResult: any): ParsedTweet | null {
+  const result = unwrapTweetResult(rawResult);
+  if (!result) return null;
+
+  const legacy = result?.legacy ?? {};
+  const retweeted = unwrapTweetResult(legacy?.retweeted_status_result?.result);
+  const content = retweeted ?? result;
+  const contentLegacy = content?.legacy ?? {};
+  const noteResult = content?.note_tweet?.note_tweet_results?.result;
+  const text =
+    typeof noteResult?.text === "string"
+      ? noteResult.text
+      : contentLegacy?.full_text;
+
+  const userResult = result?.core?.user_results?.result;
+  const user = userResult?.core ?? userResult?.legacy ?? {};
+  const id = legacy?.id_str ?? result?.rest_id;
+
+  const articleResult =
+    content?.article?.article_results?.result ??
+    content?.article;
+  const article =
+    articleResult &&
+    (typeof articleResult?.title === "string" ||
+      typeof articleResult?.preview_text === "string" ||
+      typeof articleResult?.plain_text === "string")
+      ? {
+          id: articleResult?.rest_id ?? articleResult?.id,
+          title: articleResult?.title,
+          preview_text: articleResult?.preview_text,
+          plain_text: articleResult?.plain_text,
+        }
+      : undefined;
+
+  if (!id && text === undefined) return null;
+
+  return {
+    id,
+    text,
+    author: user?.screen_name,
+    created_at: legacy?.created_at,
+    likes: legacy?.favorite_count,
+    retweets: legacy?.retweet_count,
+    replies: legacy?.reply_count,
+    url: id && user?.screen_name
+      ? `https://x.com/${user.screen_name}/status/${id}`
+      : undefined,
+    article,
+    views: result?.views?.count,
+  };
+}
+
 function extractTimelineTweets(data: any): Tweet[] {
   const out: Tweet[] = [];
+  const seen = new Set<string>();
+  const push = (raw: any) => {
+    const tweet = parseTweetResult(raw);
+    if (!tweet?.id || seen.has(tweet.id)) return;
+    seen.add(tweet.id);
+    out.push(tweet);
+  };
+
   try {
     const instr = data.data.user.result.timeline_v2.timeline.instructions;
     for (const i of instr) {
       for (const entry of i.entries ?? []) {
-        const legacy = entry?.content?.itemContent?.tweet_results?.result?.legacy;
-        if (legacy) {
-          out.push({
-            id: legacy.id_str,
-            text: legacy.full_text,
-            created_at: legacy.created_at,
-            likes: legacy.favorite_count,
-            retweets: legacy.retweet_count,
-            replies: legacy.reply_count,
-          });
-        }
+        for (const raw of tweetResultsFromEntry(entry)) push(raw);
+      }
+      for (const item of i.moduleItems ?? []) {
+        for (const raw of tweetModuleResults({ content: { items: [item] } })) push(raw);
       }
     }
   } catch {
@@ -880,15 +973,16 @@ function extractTimelineTweets(data: any): Tweet[] {
 }
 
 /** Dig the author screen_name out of a TweetDetail response, for building quote urls. */
-function findAuthorHandle(detail: any): string | undefined {
+function findAuthorHandle(detail: any, tweetId?: string): string | undefined {
   try {
     const instr = detail.data.threaded_conversation_with_injections_v2.instructions;
     for (const ins of instr) {
       for (const entry of ins.entries ?? []) {
-        if ((entry.entryId ?? "").startsWith("tweet-")) {
-          const res = entry.content?.itemContent?.tweet_results?.result;
-          const core = res?.core?.user_results?.result?.core;
-          if (core?.screen_name) return core.screen_name;
+        for (const raw of tweetResultsFromEntry(entry)) {
+          const tweet = parseTweetResult(raw);
+          if (tweet?.author && (!tweetId || String(tweet.id) === String(tweetId))) {
+            return tweet.author;
+          }
         }
       }
     }
@@ -927,24 +1021,22 @@ function extractTimelineUsers(data: any): XUser[] {
 
 function extractSearchTweets(data: any): Tweet[] {
   const out: Tweet[] = [];
+  const seen = new Set<string>();
+  const push = (raw: any) => {
+    const tweet = parseTweetResult(raw);
+    if (!tweet?.id || seen.has(tweet.id)) return;
+    seen.add(tweet.id);
+    out.push(tweet);
+  };
+
   try {
     const instr = data.data.search_by_raw_query.search_timeline.timeline.instructions;
     for (const i of instr) {
       for (const entry of i.entries ?? []) {
-        const result = entry?.content?.itemContent?.tweet_results?.result;
-        const legacy = result?.legacy;
-        const user = result?.core?.user_results?.result?.core;
-        if (legacy) {
-          out.push({
-            id: legacy.id_str,
-            text: legacy.full_text,
-            author: user?.screen_name,
-            created_at: legacy.created_at,
-            likes: legacy.favorite_count,
-            retweets: legacy.retweet_count,
-            url: `https://x.com/${user?.screen_name}/status/${legacy.id_str}`,
-          });
-        }
+        for (const raw of tweetResultsFromEntry(entry)) push(raw);
+      }
+      for (const item of i.moduleItems ?? []) {
+        for (const raw of tweetModuleResults({ content: { items: [item] } })) push(raw);
       }
     }
   } catch {
