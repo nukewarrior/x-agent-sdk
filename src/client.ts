@@ -135,13 +135,6 @@ export interface XClientOptions {
   onRateLimit?: (info: RateLimitInfo) => void;
 }
 
-export interface TweetArticle {
-  id?: string;
-  title?: string;
-  preview_text?: string;
-  plain_text?: string;
-}
-
 export interface Tweet {
   id: string | undefined;
   text: string | undefined;
@@ -151,7 +144,6 @@ export interface Tweet {
   retweets: number | undefined;
   replies?: number | undefined;
   url?: string;
-  article?: TweetArticle;
 }
 
 export interface XUser {
@@ -477,7 +469,7 @@ export class XClient {
       url = tweetUrlOrId;
     } else {
       const detail = await this.getTweet(tweetUrlOrId);
-      const handle = findAuthorHandle(detail, tweetUrlOrId);
+      const handle = findAuthorHandle(detail);
       if (!handle) throw new XError("could not resolve tweet author for quote url");
       url = `https://x.com/${handle}/status/${tweetUrlOrId}`;
     }
@@ -774,7 +766,7 @@ export class XClient {
       FEATURES_READ,
       {
         withArticleRichContentState: true,
-        withArticlePlainText: true,
+        withArticlePlainText: false,
         withGrokAnalyze: false,
         withDisallowedReplyControls: false,
       },
@@ -912,22 +904,6 @@ function parseTweetResult(rawResult: any): ParsedTweet | null {
   const user = userResult?.core ?? userResult?.legacy ?? {};
   const id = legacy?.id_str ?? result?.rest_id;
 
-  const articleResult =
-    content?.article?.article_results?.result ??
-    content?.article;
-  const article =
-    articleResult &&
-    (typeof articleResult?.title === "string" ||
-      typeof articleResult?.preview_text === "string" ||
-      typeof articleResult?.plain_text === "string")
-      ? {
-          id: articleResult?.rest_id ?? articleResult?.id,
-          title: articleResult?.title,
-          preview_text: articleResult?.preview_text,
-          plain_text: articleResult?.plain_text,
-        }
-      : undefined;
-
   if (!id && text === undefined) return null;
 
   return {
@@ -941,7 +917,6 @@ function parseTweetResult(rawResult: any): ParsedTweet | null {
     url: id && user?.screen_name
       ? `https://x.com/${user.screen_name}/status/${id}`
       : undefined,
-    article,
     views: result?.views?.count,
   };
 }
@@ -973,16 +948,18 @@ function extractTimelineTweets(data: any): Tweet[] {
 }
 
 /** Dig the author screen_name out of a TweetDetail response, for building quote urls. */
-function findAuthorHandle(detail: any, tweetId?: string): string | undefined {
+function findAuthorHandle(detail: any): string | undefined {
   try {
     const instr = detail.data.threaded_conversation_with_injections_v2.instructions;
     for (const ins of instr) {
       for (const entry of ins.entries ?? []) {
-        for (const raw of tweetResultsFromEntry(entry)) {
-          const tweet = parseTweetResult(raw);
-          if (tweet?.author && (!tweetId || String(tweet.id) === String(tweetId))) {
-            return tweet.author;
-          }
+        if ((entry.entryId ?? "").startsWith("tweet-")) {
+          const res = unwrapTweetResult(
+            entry.content?.itemContent?.tweet_results?.result,
+          );
+          const userResult = res?.core?.user_results?.result;
+          const user = userResult?.core ?? userResult?.legacy;
+          if (user?.screen_name) return user.screen_name;
         }
       }
     }
