@@ -77,6 +77,255 @@ describe("XClient parsing", () => {
     const u = await x.getUser("x");
     expect(u.rest_id).toBe("783214");
   });
+
+  test("getThread prefers Note Tweet text and parses module replies", async () => {
+    apiHandler = () => ({
+      status: 200,
+      body: {
+        data: {
+          threaded_conversation_with_injections_v2: {
+            instructions: [
+              {
+                entries: [
+                  {
+                    entryId: "tweet-100",
+                    content: {
+                      itemContent: {
+                        tweet_results: {
+                          result: {
+                            __typename: "TweetWithVisibilityResults",
+                            tweet: {
+                              rest_id: "100",
+                              legacy: {
+                                id_str: "100",
+                                full_text: "truncated root...",
+                                created_at: "now",
+                                favorite_count: 4,
+                                retweet_count: 2,
+                                reply_count: 1,
+                              },
+                              note_tweet: {
+                                note_tweet_results: {
+                                  result: { text: "complete root body beyond the classic limit" },
+                                },
+                              },
+                              core: {
+                                user_results: {
+                                  result: { core: { screen_name: "root_user" } },
+                                },
+                              },
+                              views: { count: "123" },
+                              article: {
+                                article_results: {
+                                  result: {
+                                    rest_id: "article-1",
+                                    title: "Article title",
+                                    preview_text: "Article preview",
+                                    plain_text: "Article full text",
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  {
+                    entryId: "conversationthread-1",
+                    content: {
+                      items: [
+                        {
+                          item: {
+                            itemContent: {
+                              tweet_results: {
+                                result: {
+                                  rest_id: "101",
+                                  legacy: {
+                                    id_str: "101",
+                                    full_text: "truncated reply...",
+                                    created_at: "later",
+                                    favorite_count: 1,
+                                    retweet_count: 0,
+                                    reply_count: 0,
+                                  },
+                                  note_tweet: {
+                                    note_tweet_results: {
+                                      result: { text: "complete longform reply" },
+                                    },
+                                  },
+                                  core: {
+                                    user_results: {
+                                      result: { core: { screen_name: "reply_user" } },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const x = new XClient(opts);
+    const thread = await x.getThread("100");
+
+    expect(thread.root.text).toBe("complete root body beyond the classic limit");
+    expect(thread.root.article?.plain_text).toBe("Article full text");
+    expect(thread.root.views).toBe("123");
+    expect(thread.replies).toHaveLength(1);
+    expect(thread.replies[0].text).toBe("complete longform reply");
+    expect(thread.replies[0].author).toBe("reply_user");
+
+    const detailCall = calls.find((c) => c.url.includes("TweetDetail"));
+    expect(detailCall).toBeDefined();
+    const toggles = JSON.parse(
+      new URL(detailCall!.url).searchParams.get("fieldToggles") ?? "{}",
+    );
+    expect(toggles.withArticlePlainText).toBe(true);
+  });
+
+  test("timeline parsing unwraps visibility results and uses retweeted Note Tweet text", async () => {
+    apiHandler = () => ({
+      status: 200,
+      body: {
+        data: {
+          user: {
+            result: {
+              timeline_v2: {
+                timeline: {
+                  instructions: [
+                    {
+                      entries: [
+                        {
+                          entryId: "tweet-200",
+                          content: {
+                            itemContent: {
+                              tweet_results: {
+                                result: {
+                                  __typename: "TweetWithVisibilityResults",
+                                  tweet: {
+                                    rest_id: "200",
+                                    legacy: {
+                                      id_str: "200",
+                                      full_text: "RT @source: truncated...",
+                                      created_at: "now",
+                                      favorite_count: 0,
+                                      retweet_count: 0,
+                                      reply_count: 0,
+                                      retweeted_status_result: {
+                                        result: {
+                                          rest_id: "199",
+                                          legacy: {
+                                            id_str: "199",
+                                            full_text: "original truncated...",
+                                          },
+                                          note_tweet: {
+                                            note_tweet_results: {
+                                              result: {
+                                                text: "complete original longform body",
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    core: {
+                                      user_results: {
+                                        result: { core: { screen_name: "retweeter" } },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const x = new XClient(opts);
+    const tweets = await x.getUserTweets("42", 20);
+
+    expect(tweets).toHaveLength(1);
+    expect(tweets[0].id).toBe("200");
+    expect(tweets[0].author).toBe("retweeter");
+    expect(tweets[0].text).toBe("complete original longform body");
+  });
+
+  test("search parsing uses complete Note Tweet text", async () => {
+    apiHandler = () => ({
+      status: 200,
+      body: {
+        data: {
+          search_by_raw_query: {
+            search_timeline: {
+              timeline: {
+                instructions: [
+                  {
+                    entries: [
+                      {
+                        entryId: "tweet-300",
+                        content: {
+                          itemContent: {
+                            tweet_results: {
+                              result: {
+                                rest_id: "300",
+                                legacy: {
+                                  id_str: "300",
+                                  full_text: "truncated search...",
+                                  created_at: "now",
+                                  favorite_count: 3,
+                                  retweet_count: 1,
+                                },
+                                note_tweet: {
+                                  note_tweet_results: {
+                                    result: { text: "complete search longform body" },
+                                  },
+                                },
+                                core: {
+                                  user_results: {
+                                    result: { core: { screen_name: "search_user" } },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const x = new XClient(opts);
+    const tweets = await x.search("longform", 20, "Latest");
+
+    expect(tweets).toHaveLength(1);
+    expect(tweets[0].text).toBe("complete search longform body");
+    expect(tweets[0].url).toBe("https://x.com/search_user/status/300");
+  });
 });
 
 describe("XClient rate limit + injectable fetch", () => {
