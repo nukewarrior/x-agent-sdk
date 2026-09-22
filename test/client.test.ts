@@ -78,7 +78,7 @@ describe("XClient parsing", () => {
     expect(u.rest_id).toBe("783214");
   });
 
-  test("getThread prefers Note Tweet text and parses module replies", async () => {
+  test("getThread keeps the focal root and parses longform module replies", async () => {
     apiHandler = () => ({
       status: 200,
       body: {
@@ -115,15 +115,30 @@ describe("XClient parsing", () => {
                                 },
                               },
                               views: { count: "123" },
-                              article: {
-                                article_results: {
-                                  result: {
-                                    rest_id: "article-1",
-                                    title: "Article title",
-                                    preview_text: "Article preview",
-                                    plain_text: "Article full text",
-                                  },
-                                },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  {
+                    entryId: "tweet-102",
+                    content: {
+                      itemContent: {
+                        tweet_results: {
+                          result: {
+                            rest_id: "102",
+                            legacy: {
+                              id_str: "102",
+                              full_text: "another direct tweet",
+                              created_at: "later",
+                              favorite_count: 0,
+                              retweet_count: 0,
+                              reply_count: 0,
+                            },
+                            core: {
+                              user_results: {
+                                result: { core: { screen_name: "other_user" } },
                               },
                             },
                           },
@@ -178,19 +193,14 @@ describe("XClient parsing", () => {
     const x = new XClient(opts);
     const thread = await x.getThread("100");
 
+    expect(thread.root.id).toBe("100");
+    expect(thread.root.author).toBe("root_user");
     expect(thread.root.text).toBe("complete root body beyond the classic limit");
-    expect(thread.root.article?.plain_text).toBe("Article full text");
     expect(thread.root.views).toBe("123");
     expect(thread.replies).toHaveLength(1);
     expect(thread.replies[0].text).toBe("complete longform reply");
     expect(thread.replies[0].author).toBe("reply_user");
 
-    const detailCall = calls.find((c) => c.url.includes("TweetDetail"));
-    expect(detailCall).toBeDefined();
-    const toggles = JSON.parse(
-      new URL(detailCall!.url).searchParams.get("fieldToggles") ?? "{}",
-    );
-    expect(toggles.withArticlePlainText).toBe(true);
   });
 
   test("timeline parsing unwraps visibility results and uses retweeted Note Tweet text", async () => {
